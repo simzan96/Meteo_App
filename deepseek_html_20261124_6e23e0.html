@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meteo Locale</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        :root {
+            --primary: #1565c0;
+            --bg: #f5f7fa;
+            --card-bg: #ffffff;
+            --text: #1e2a3a;
+            --text-light: #5a6b7b;
+            --border: #dde3ea;
+            --radius: 10px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 12px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 4px; color: var(--primary); }
+        .subtitle { font-size: 0.85rem; color: var(--text-light); margin-bottom: 18px; }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+        .row > * { flex: 1 1 180px; min-width: 0; }
+        label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: var(--text-light); }
+        input[type="text"], select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            background: #fff;
+            color: var(--text);
+        }
+        input[type="text"]:focus, select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+        button {
+            padding: 10px 18px;
+            background: var(--primary);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        button:hover { background: #0d47a1; }
+        button:disabled { background: #9e9e9e; cursor: not-allowed; }
+        .radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+        .radio-group label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 400;
+            font-size: 0.9rem;
+            color: var(--text);
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 6px 14px;
+            cursor: pointer;
+        }
+        .radio-group input[type="radio"] { accent-color: var(--primary); }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+        .metric {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        .metric .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-light); }
+        .metric .value { font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
+        .chart-container { position: relative; height: 300px; margin-top: 10px; }
+        @media (min-width: 700px) { .chart-container { height: 380px; } }
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            font-size: 0.78rem;
+            color: var(--text-light);
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed var(--border);
+        }
+        .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .swatch { display: inline-block; width: 14px; height: 12px; border-radius: 2px; }
+        .line-sample { display: inline-block; width: 22px; height: 0; border-top-width: 2.5px; border-top-style: solid; }
+        .footer { font-size: 0.75rem; color: var(--text-light); text-align: center; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border); }
+        .footer a { color: var(--primary); }
+        .alert { background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 10px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px; }
+        .hidden { display: none !important; }
+        .spinner {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<h1>🌤️ Meteo Locale</h1>
+<p class="subtitle">Dati attuali e previsioni probabilistiche (Open-Meteo)</p>
+
+<div class="card">
+    <div class="row">
+        <div style="flex: 3 1 260px;">
+            <label for="locInput">🔍 Cerca località</label>
+            <input type="text" id="locInput" placeholder="Es. Verona, Firenze, Trento…" value="Verona">
+        </div>
+        <div style="flex: 1 1 120px;">
+            <button id="searchBtn" style="width:100%;">Cerca</button>
+        </div>
+    </div>
+    <div style="margin-top:12px;">
+        <label>📅 Orizzonte temporale</label>
+        <div class="radio-group" id="scaleGroup">
+            <label><input type="radio" name="scale" value="24h"> Giornata singola (24h)</label>
+            <label><input type="radio" name="scale" value="3d" checked> 3 giorni</label>
+            <label><input type="radio" name="scale" value="7d"> Settimana (7 gg)</label>
+            <label><input type="radio" name="scale" value="14d"> 2 settimane (14 gg)</label>
+        </div>
+    </div>
+    <div id="locationInfo" style="margin-top:10px; font-size:0.9rem; color:var(--text-light);"></div>
+    <div id="errorBox" class="alert hidden"></div>
+</div>
+
+<div class="card" id="currentCard">
+    <h2 style="font-size:1.1rem; margin-bottom:10px;">📡 Dati meteo attuali</h2>
+    <div class="metrics-grid">
+        <div class="metric"><div class="label">Temperatura</div><div class="value" id="curTemp">—</div></div>
+        <div class="metric"><div class="label">Umidità rel.</div><div class="value" id="curHum">—</div></div>
+        <div class="metric"><div class="label">Precipitazioni</div><div class="value" id="curPrecip">—</div></div>
+        <div class="metric"><div class="label">Vento (10 m)</div><div class="value" id="curWind">—</div></div>
+        <div class="metric"><div class="label">Condizioni</div><div class="value" id="curDesc">—</div></div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="font-size:1.1rem;">📈 Temperatura a 2 m</h2>
+    <div class="chart-container"><canvas id="tempChart"></canvas></div>
+    <div class="chart-legend">
+        <span><span class="swatch" style="background:rgba(255,140,0,0.55);"></span> Media (linea nell'orario, barra nel giornaliero)</span>
+        <span>
+            <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true">
+                <rect x="6" y="5" width="10" height="8" fill="rgba(255,140,0,0.55)" stroke="#ff8c00" stroke-width="1"/>
+                <line x1="11" y1="1" x2="11" y2="17" stroke="#ff8c00" stroke-width="1.5"/>
+                <line x1="7" y1="1" x2="15" y2="1" stroke="#ff8c00" stroke-width="1.5"/>
+                <line x1="7" y1="17" x2="15" y2="17" stroke="#ff8c00" stroke-width="1.5"/>
+            </svg>
+            Incertezza 10°–90° (banda nell'orario, barra d'errore nel giornaliero)
+        </span>
+        <span><span class="line-sample" style="border-top-color:#1e6fff; border-top-style:dashed;"></span> Minima (solo vista giornaliera)</span>
+        <span><span class="line-sample" style="border-top-color:#d62728; border-top-style:dashed;"></span> Massima (solo vista giornaliera)</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="font-size:1.1rem;">📈 Precipitazioni — pioggia e neve</h2>
+    <div class="chart-container"><canvas id="precipChart"></canvas></div>
+    <div class="chart-legend">
+        <span><span class="line-sample" style="border-top-color:#1e6fff;"></span> Pioggia (media ensemble)</span>
+        <span><span class="swatch" style="background:rgba(30,111,255,0.20);"></span> Incertezza pioggia 10°–90°</span>
+        <span><span class="line-sample" style="border-top-color:#7ec8e3;"></span> Neve (media ensemble)</span>
+        <span><span class="swatch" style="background:rgba(126,200,227,0.30);"></span> Incertezza neve 10°–90°</span>
+    </div>
+</div>
+
+<p class="footer">
+    Dati meteorologici forniti da <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (licenza CC BY 4.0).
+</p>
+
+<script>
+// ============================================================
+// COSTANTI
+// ============================================================
+const SCALE = {
+    "24h": { hours: 24, mode: "hourly" },
+    "3d":  { hours: 72, mode: "hourly" },
+    "7d":  { days: 7, mode: "daily" },
+    "14d": { days: 14, mode: "daily" }
+};
+
+const MAX_FORECAST_DAYS = 14;
+const SOGLIA_NEVE_C = 1.5;
+
+// ============================================================
+// PLUGIN BARRE D'ERRORE (a T, sovrapposte alla barra)
+// Disegna, per ogni punto con {low, high}:
+//   - una linea verticale sottile da low a high
+//   - un trattino orizzontale in cima (T capovolta)
+//   - un trattino orizzontale in fondo (T diritta)
+// tutto centrato sulla posizione x della categoria (= centro della barra).
+// ============================================================
+const errorBarPlugin = {
+    id: "errorBars",
+    afterDatasetsDraw(chart, _args, opts) {
+        if (!opts || !Array.isArray(opts.data)) return;
+        const { ctx } = chart;
+        const xScale = chart.scales.x;
+        const yScale = chart.scales.y;
+        if (!xScale || !yScale) return;
+
+        const color = opts.color || "#ff8c00";
+        const capWidth = opts.capWidth ?? 10;
+        const lineWidth = opts.lineWidth ?? 1.5;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+
+        opts.data.forEach((d, i) => {
+            if (!d || d.low == null || d.high == null) return;
+            const xPos = xScale.getPixelForValue(i);
+            const yLow = yScale.getPixelForValue(d.low);
+            const yHigh = yScale.getPixelForValue(d.high);
+
+            // Linea verticale
+            ctx.moveTo(xPos, yLow);
+            ctx.lineTo(xPos, yHigh);
+
+            // Cap superiore
+            ctx.moveTo(xPos - capWidth / 2, yLow);
+            ctx.lineTo(xPos + capWidth / 2, yLow);
+
+            // Cap inferiore
+            ctx.moveTo(xPos - capWidth / 2, yHigh);
+            ctx.lineTo(xPos + capWidth / 2, yHigh);
+        });
+
+        ctx.stroke();
+        ctx.restore();
+    }
+};
+Chart.register(errorBarPlugin);
+
+// ============================================================
+// STATO
+// ============================================================
+let state = {
+    lat: null,
+    lon: null,
+    locationName: "",
+    scale: "3d",
+    ensembleData: null,
+    tempChart: null,
+    precipChart: null
+};
+
+// ============================================================
+// UTILITÀ
+// ============================================================
+function showError(msg) {
+    const box = document.getElementById("errorBox");
+    box.textContent = msg;
+    box.classList.remove("hidden");
+}
+function clearError() {
+    document.getElementById("errorBox").classList.add("hidden");
+}
+
+async function fetchJSON(url, timeoutMs = 20000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const r = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (!r.ok) throw new Error(`HTTP ${r.status} su ${url}`);
+        return await r.json();
+    } catch (e) {
+        clearTimeout(timer);
+        throw e;
+    }
+}
+
+function percentile(arr, p) {
+    if (arr.length === 0) return NaN;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return sorted[lo];
+    const frac = idx - lo;
+    return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+}
+function mean(arr) {
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+// ============================================================
+// GEOCODING
+// ============================================================
+async function geocode(name) {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=it&format=json`;
+    const data = await fetchJSON(url, 10000);
+    if (!data.results || data.results.length === 0) {
+        throw new Error(`Località "${name}" non trovata.`);
+    }
+    const r = data.results[0];
+    const admin = r.admin1 ? `, ${r.admin1}` : "";
+    return {
+        name: `${r.name}${admin} (${r.country_code || ""})`,
+        lat: r.latitude,
+        lon: r.longitude
+    };
+}
+
+// ============================================================
+// DATI ATTUALI
+// ============================================================
+async function fetchCurrent(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+        + `&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code`
+        + `&timezone=auto`;
+    const data = await fetchJSON(url, 10000);
+    return data.current || {};
+}
+
+// ============================================================
+// ENSEMBLE
+// ============================================================
+async function fetchEnsemble(lat, lon, forecastDays) {
+    const url = `https://ensemble-api.open-meteo.com/v1/ensemble?latitude=${lat}&longitude=${lon}`
+        + `&hourly=temperature_2m,precipitation`
+        + `&models=ecmwf_ifs025_ensemble`
+        + `&forecast_days=${forecastDays}`
+        + `&timezone=auto`;
+    const data = await fetchJSON(url, 30000);
+    const hourly = data.hourly || {};
+    const time = hourly.time || [];
+    if (time.length === 0) throw new Error("Nessun dato orario restituito dall'API ensemble.");
+
+    const tempMembers = [];
+    const precipMembers = [];
+    for (const key of Object.keys(hourly)) {
+        if (key.startsWith("temperature_2m_member")) tempMembers.push(hourly[key]);
+        else if (key.startsWith("precipitation_member")) precipMembers.push(hourly[key]);
+    }
+    if (tempMembers.length === 0) throw new Error("Nessun membro ensemble per la temperatura.");
+
+    return { time, tempMembers, precipMembers };
+}
+
+// ============================================================
+// VISTA ORARIA
+// ============================================================
+function prepareHourlyView(ensemble, hours) {
+    const n = Math.min(hours, ensemble.time.length);
+    const time = ensemble.time.slice(0, n);
+    const tempMembers = ensemble.tempMembers.map(m => m.slice(0, n));
+    const precipMembers = ensemble.precipMembers.map(m => m.slice(0, n));
+    const nMem = tempMembers.length;
+
+    const tempMin = [], tempMean = [], tempMax = [], tempP10 = [], tempP90 = [];
+    const rainMean = [], rainP10 = [], rainP90 = [];
+    const snowMean = [], snowP10 = [], snowP90 = [];
+
+    for (let i = 0; i < n; i++) {
+        const tVals = tempMembers.map(m => m[i]).filter(v => v != null);
+        if (tVals.length > 0) {
+            tempMin.push(Math.min(...tVals));
+            tempMax.push(Math.max(...tVals));
+            tempMean.push(mean(tVals));
+            tempP10.push(percentile(tVals, 10));
+            tempP90.push(percentile(tVals, 90));
+        } else {
+            tempMin.push(null); tempMax.push(null); tempMean.push(null);
+            tempP10.push(null); tempP90.push(null);
+        }
+
+        const rainVals = [], snowVals = [];
+        for (let m = 0; m < nMem; m++) {
+            const p = precipMembers.length ? precipMembers[m][i] : 0;
+            const t = tempMembers[m][i];
+            if (p == null) { rainVals.push(0); snowVals.push(0); continue; }
+            if (t != null && t <= SOGLIA_NEVE_C) { snowVals.push(p); rainVals.push(0); }
+            else { rainVals.push(p); snowVals.push(0); }
+        }
+        rainMean.push(mean(rainVals));
+        rainP10.push(percentile(rainVals, 10));
+        rainP90.push(percentile(rainVals, 90));
+        snowMean.push(mean(snowVals));
+        snowP10.push(percentile(snowVals, 10));
+        snowP90.push(percentile(snowVals, 90));
+    }
+
+    return {
+        time,
+        temp: { min: tempMin, mean: tempMean, max: tempMax, p10: tempP10, p90: tempP90 },
+        precip: {
+            rain: { mean: rainMean, p10: rainP10, p90: rainP90 },
+            snow: { mean: snowMean, p10: snowP10, p90: snowP90 }
+        }
+    };
+}
+
+// ============================================================
+// VISTA GIORNALIERA
+// ============================================================
+function prepareDailyView(ensemble, days) {
+    const n = Math.min(days * 24, ensemble.time.length);
+    const time = ensemble.time.slice(0, n);
+    const tempMembers = ensemble.tempMembers.map(m => m.slice(0, n));
+    const precipMembers = ensemble.precipMembers.map(m => m.slice(0, n));
+    const nMem = tempMembers.length;
+
+    const dayKeys = time.map(t => t.slice(0, 10));
+    const uniqueDays = [...new Set(dayKeys)].sort();
+
+    const res = {
+        dates: uniqueDays,
+        temp: {
+            minMean: [], minP10: [], minP90: [],
+            meanMean: [], meanP10: [], meanP90: [],
+            maxMean: [], maxP10: [], maxP90: []
+        },
+        precip: {
+            rain: { mean: [], p10: [], p90: [] },
+            snow: { mean: [], p10: [], p90: [] }
+        }
+    };
+
+    for (const day of uniqueDays) {
+        const idxs = [];
+        for (let i = 0; i < dayKeys.length; i++) if (dayKeys[i] === day) idxs.push(i);
+        if (idxs.length === 0) continue;
+
+        const dailyMins = [], dailyMeans = [], dailyMaxs = [];
+        const dailyRains = [], dailySnows = [];
+
+        for (let m = 0; m < nMem; m++) {
+            const tVals = idxs.map(i => tempMembers[m][i]).filter(v => v != null);
+            if (tVals.length > 0) {
+                dailyMins.push(Math.min(...tVals));
+                dailyMaxs.push(Math.max(...tVals));
+                dailyMeans.push(mean(tVals));
+            }
+
+            let rainSum = 0, snowSum = 0;
+            for (const i of idxs) {
+                const p = precipMembers.length ? precipMembers[m][i] : 0;
+                if (p == null || p <= 0) continue;
+                const t = tempMembers[m][i];
+                if (t != null && t <= SOGLIA_NEVE_C) snowSum += p;
+                else rainSum += p;
+            }
+            dailyRains.push(rainSum);
+            dailySnows.push(snowSum);
+        }
+
+        res.temp.minMean.push(mean(dailyMins));
+        res.temp.minP10.push(percentile(dailyMins, 10));
+        res.temp.minP90.push(percentile(dailyMins, 90));
+
+        res.temp.meanMean.push(mean(dailyMeans));
+        res.temp.meanP10.push(percentile(dailyMeans, 10));
+        res.temp.meanP90.push(percentile(dailyMeans, 90));
+
+        res.temp.maxMean.push(mean(dailyMaxs));
+        res.temp.maxP10.push(percentile(dailyMaxs, 10));
+        res.temp.maxP90.push(percentile(dailyMaxs, 90));
+
+        res.precip.rain.mean.push(mean(dailyRains));
+        res.precip.rain.p10.push(percentile(dailyRains, 10));
+        res.precip.rain.p90.push(percentile(dailyRains, 90));
+
+        res.precip.snow.mean.push(mean(dailySnows));
+        res.precip.snow.p10.push(percentile(dailySnows, 10));
+        res.precip.snow.p90.push(percentile(dailySnows, 90));
+    }
+    return res;
+}
+
+// ============================================================
+// FORMATTAZIONE DATE
+// ============================================================
+function formatHourLabel(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" })
+        + " " + d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+}
+function formatDayLabel(iso) {
+    const d = new Date(iso + "T12:00:00");
+    return d.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+// ============================================================
+// GRAFICO TEMPERATURA
+// Orario: linee con banda. Giornaliero: barre con barre d'errore a T.
+// ============================================================
+function renderTempChart(view, mode) {
+    const ctx = document.getElementById("tempChart").getContext("2d");
+    if (state.tempChart) state.tempChart.destroy();
+
+    let labels, minData, meanData, maxData, p10Data, p90Data;
+    if (mode === "hourly") {
+        labels = view.time.map(formatHourLabel);
+        meanData = view.temp.mean;
+        p10Data = view.temp.p10;
+        p90Data = view.temp.p90;
+    } else {
+        labels = view.dates.map(formatDayLabel);
+        minData = view.temp.minMean;
+        meanData = view.temp.meanMean;
+        maxData = view.temp.maxMean;
+        p10Data = view.temp.meanP10;
+        p90Data = view.temp.meanP90;
+    }
+
+    let datasets;
+    let errorBarsConfig;
+
+    if (mode === "hourly") {
+        datasets = [
+            {
+                label: "Incertezza media 10°–90°",
+                data: p10Data,
+                borderColor: "rgba(255,165,0,0)",
+                backgroundColor: "rgba(255,165,0,0.20)",
+                fill: "+1",
+                pointRadius: 0,
+                tension: 0.25,
+                order: 10
+            },
+            {
+                label: "Incertezza media 10°–90°",
+                data: p90Data,
+                borderColor: "rgba(255,165,0,0)",
+                backgroundColor: "rgba(255,165,0,0.20)",
+                fill: "-1",
+                pointRadius: 0,
+                tension: 0.25,
+                order: 10
+            },
+            {
+                label: "Media",
+                data: meanData,
+                borderColor: "#ff8c00",
+                backgroundColor: "transparent",
+                borderWidth: 2.5,
+                pointRadius: 0,
+                tension: 0.25,
+                order: 1
+            }
+        ];
+        errorBarsConfig = null;
+    } else {
+        datasets = [
+            {
+                label: "Minima",
+                data: minData,
+                borderColor: "#1e6fff",
+                backgroundColor: "transparent",
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 3,
+                pointBackgroundColor: "#1e6fff",
+                tension: 0.25,
+                order: 3
+            },
+            {
+                label: "Massima",
+                data: maxData,
+                borderColor: "#d62728",
+                backgroundColor: "transparent",
+                borderWidth: 2,
+                borderDash: [6, 4],
+                pointRadius: 3,
+                pointBackgroundColor: "#d62728",
+                tension: 0.25,
+                order: 2
+            },
+            {
+                label: "Media",
+                type: "bar",
+                data: meanData,
+                backgroundColor: "rgba(255,140,0,0.55)",
+                borderColor: "#ff8c00",
+                borderWidth: 1.5,
+                borderRadius: 3,
+                barPercentage: 0.65,
+                categoryPercentage: 0.85,
+                order: 1
+            }
+        ];
+        // Barre d'errore centrate sulla barra, disegnate dal plugin custom
+        errorBarsConfig = {
+            data: p10Data.map((lo, i) => ({ low: lo, high: p90Data[i] })),
+            color: "#ff8c00",
+            capWidth: 10,
+            lineWidth: 1.5
+        };
+    }
+
+    state.tempChart = new Chart(ctx, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: {
+                    position: "top",
+                    labels: {
+                        boxWidth: 14,
+                        font: { size: 11 },
+                        filter: (item) => {
+                            if (!item.text.startsWith("Incertezza")) return true;
+                            return item.datasetIndex === 0;
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => {
+                            if (c.dataset.label.startsWith("Incertezza")) return null;
+                            const v = c.parsed.y;
+                            if (v == null) return `${c.dataset.label}: —`;
+                            return `${c.dataset.label}: ${v.toFixed(1)} °C`;
+                        },
+                        footer: (items) => {
+                            if (mode !== "daily") return "";
+                            const idx = items[0]?.dataIndex;
+                            if (idx == null) return "";
+                            const lo = p10Data[idx], hi = p90Data[idx];
+                            if (lo == null || hi == null) return "";
+                            return `Incertezza 10°–90° (media): ${lo.toFixed(1)} – ${hi.toFixed(1)} °C`;
+                        }
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        zero: {
+                            type: "line", yMin: 0, yMax: 0,
+                            borderColor: "rgba(0,0,255,0.4)", borderWidth: 1.5, borderDash: [4, 4]
+                        }
+                    }
+                },
+                errorBars: errorBarsConfig
+            },
+            scales: {
+                y: { title: { display: true, text: "°C" }, ticks: { font: { size: 11 } } },
+                x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, maxRotation: 45 } }
+            }
+        }
+    });
+}
+
+// ============================================================
+// GRAFICO PRECIPITAZIONI — linee con incertezza (invariato)
+// ============================================================
+function renderPrecipChart(view, mode) {
+    const ctx = document.getElementById("precipChart").getContext("2d");
+    if (state.precipChart) state.precipChart.destroy();
+
+    let labels, rainMean, rainP10, rainP90, snowMean, snowP10, snowP90;
+    if (mode === "hourly") {
+        labels = view.time.map(formatHourLabel);
+        rainMean = view.precip.rain.mean;
+        rainP10 = view.precip.rain.p10;
+        rainP90 = view.precip.rain.p90;
+        snowMean = view.precip.snow.mean;
+        snowP10 = view.precip.snow.p10;
+        snowP90 = view.precip.snow.p90;
+    } else {
+        labels = view.dates.map(formatDayLabel);
+        rainMean = view.precip.rain.mean;
+        rainP10 = view.precip.rain.p10;
+        rainP90 = view.precip.rain.p90;
+        snowMean = view.precip.snow.mean;
+        snowP10 = view.precip.snow.p10;
+        snowP90 = view.precip.snow.p90;
+    }
+
+    const datasets = [
+        {
+            label: "Incertezza pioggia 10°–90°",
+            data: rainP10,
+            borderColor: "rgba(30,111,255,0)",
+            backgroundColor: "rgba(30,111,255,0.18)",
+            fill: "+1",
+            pointRadius: 0,
+            tension: 0.25,
+            order: 10
+        },
+        {
+            label: "Incertezza pioggia 10°–90°",
+            data: rainP90,
+            borderColor: "rgba(30,111,255,0)",
+            backgroundColor: "rgba(30,111,255,0.18)",
+            fill: "-1",
+            pointRadius: 0,
+            tension: 0.25,
+            order: 10
+        },
+        {
+            label: "Incertezza neve 10°–90°",
+            data: snowP10,
+            borderColor: "rgba(126,200,227,0)",
+            backgroundColor: "rgba(126,200,227,0.30)",
+            fill: "+1",
+            pointRadius: 0,
+            tension: 0.25,
+            order: 9
+        },
+        {
+            label: "Incertezza neve 10°–90°",
+            data: snowP90,
+            borderColor: "rgba(126,200,227,0)",
+            backgroundColor: "rgba(126,200,227,0.30)",
+            fill: "-1",
+            pointRadius: 0,
+            tension: 0.25,
+            order: 9
+        },
+        {
+            label: "Neve (media ensemble)",
+            data: snowMean,
+            borderColor: "#7ec8e3",
+            backgroundColor: "transparent",
+            borderWidth: 2.5,
+            pointRadius: mode === "daily" ? 3 : 0,
+            pointBackgroundColor: "#7ec8e3",
+            tension: 0.25,
+            order: 2
+        },
+        {
+            label: "Pioggia (media ensemble)",
+            data: rainMean,
+            borderColor: "#1e6fff",
+            backgroundColor: "transparent",
+            borderWidth: 2.5,
+            pointRadius: mode === "daily" ? 3 : 0,
+            pointBackgroundColor: "#1e6fff",
+            tension: 0.25,
+            order: 1
+        }
+    ];
+
+    state.precipChart = new Chart(ctx, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+                legend: {
+                    position: "top",
+                    labels: {
+                        boxWidth: 14,
+                        font: { size: 11 },
+                        filter: (item) => !(item.text.startsWith("Incertezza") && item.datasetIndex % 2 === 1)
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => {
+                            if (c.dataset.label.startsWith("Incertezza")) return null;
+                            const v = c.parsed.y;
+                            if (v == null) return `${c.dataset.label}: —`;
+                            return `${c.dataset.label}: ${v.toFixed(2)} mm`;
+                        }
+                    }
+                },
+                errorBars: null
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: "mm" },
+                    ticks: { font: { size: 11 } }
+                },
+                x: { ticks: { maxTicksLimit: 12, font: { size: 10 }, maxRotation: 45 } }
+            }
+        }
+    });
+}
+
+// ============================================================
+// DATI ATTUALI
+// ============================================================
+const WEATHER_DESC = {
+    0: "Sereno", 1: "Preval. sereno", 2: "Parz. nuvoloso", 3: "Nuvoloso",
+    45: "Nebbia", 51: "Pioviggine", 61: "Pioggia", 71: "Neve",
+    80: "Rovesci", 95: "Temporale"
+};
+function renderCurrent(cur) {
+    document.getElementById("curTemp").textContent = cur.temperature_2m != null ? `${cur.temperature_2m} °C` : "—";
+    document.getElementById("curHum").textContent = cur.relative_humidity_2m != null ? `${cur.relative_humidity_2m} %` : "—";
+    document.getElementById("curPrecip").textContent = cur.precipitation != null ? `${cur.precipitation} mm` : "—";
+    document.getElementById("curWind").textContent = cur.wind_speed_10m != null ? `${cur.wind_speed_10m} km/h` : "—";
+    const wcode = cur.weather_code;
+    document.getElementById("curDesc").textContent = WEATHER_DESC[wcode] || (wcode != null ? `Cod. ${wcode}` : "—");
+}
+
+// ============================================================
+// ORCHESTRAZIONE
+// ============================================================
+function drawForScale(ensemble, scaleKey) {
+    const cfg = SCALE[scaleKey];
+    if (cfg.mode === "hourly") {
+        const view = prepareHourlyView(ensemble, cfg.hours);
+        renderTempChart(view, "hourly");
+        renderPrecipChart(view, "hourly");
+    } else {
+        const view = prepareDailyView(ensemble, cfg.days);
+        renderTempChart(view, "daily");
+        renderPrecipChart(view, "daily");
+    }
+}
+
+async function refreshAll() {
+    clearError();
+    const btn = document.getElementById("searchBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Carico…';
+
+    try {
+        if (!state.lat) {
+            const loc = await geocode(document.getElementById("locInput").value.trim());
+            state.lat = loc.lat;
+            state.lon = loc.lon;
+            state.locationName = loc.name;
+        }
+        document.getElementById("locationInfo").textContent =
+            `📍 ${state.locationName} — Lat: ${state.lat.toFixed(4)}, Lon: ${state.lon.toFixed(4)}`;
+
+        const scaleRadio = document.querySelector('input[name="scale"]:checked');
+        state.scale = scaleRadio ? scaleRadio.value : "3d";
+
+        const [cur, ensemble] = await Promise.all([
+            fetchCurrent(state.lat, state.lon),
+            fetchEnsemble(state.lat, state.lon, MAX_FORECAST_DAYS)
+        ]);
+        state.ensembleData = ensemble;
+        renderCurrent(cur);
+        drawForScale(ensemble, state.scale);
+    } catch (e) {
+        console.error(e);
+        showError(`Errore: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Cerca";
+    }
+}
+
+// ============================================================
+// EVENTI
+// ============================================================
+document.getElementById("scaleGroup").addEventListener("change", () => {
+    const scaleRadio = document.querySelector('input[name="scale"]:checked');
+    state.scale = scaleRadio ? scaleRadio.value : "3d";
+    if (state.ensembleData) drawForScale(state.ensembleData, state.scale);
+});
+
+document.getElementById("searchBtn").addEventListener("click", () => {
+    state.lat = null;
+    refreshAll();
+});
+document.getElementById("locInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        state.lat = null;
+        refreshAll();
+    }
+});
+
+refreshAll();
+</script>
+</body>
+</html>
